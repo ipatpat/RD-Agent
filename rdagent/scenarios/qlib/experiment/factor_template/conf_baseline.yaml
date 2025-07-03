@@ -1,6 +1,6 @@
 qlib_init:
-    provider_uri: "~/.qlib/qlib_data/cn_data"
-    region: cn
+    provider_uri: "~/.qlib/qlib_data/us_data"
+    region: us
 
 market: &market nasdaq100
 benchmark: &benchmark ^ndx
