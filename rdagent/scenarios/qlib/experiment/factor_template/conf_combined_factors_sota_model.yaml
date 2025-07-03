@@ -98,7 +98,6 @@ task:
                 module_path: qlib.contrib.data.handler
                 kwargs: *data_handler_config
             segments:
-            segments:
                 train: [2014-01-01, 2020-12-31]
                 valid: [2021-01-01, 2022-12-31]
                 test: [2023-01-01, 2025-06-01]
