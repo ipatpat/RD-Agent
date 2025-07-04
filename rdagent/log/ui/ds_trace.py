@@ -1,6 +1,7 @@
 import hashlib
 import json
 import pickle
+import random
 import re
 from collections import defaultdict
 from datetime import timedelta
@@ -77,6 +78,9 @@ def load_data(log_path: Path):
             if msg.tag == "competition":
                 data["competition"] = msg.content
                 continue
+            if "SETTINGS" in msg.tag:
+                data["settings"][msg.tag] = msg.content
+                continue
 
             msg.tag = re.sub(r"\.evo_loop_\d+", "", msg.tag)
             msg.tag = re.sub(r"Loop_\d+\.[^.]+\.?", "", msg.tag)
@@ -130,31 +134,27 @@ def load_stdout(stdout_path: Path):
 
 
 # UI windows
-def task_win(data):
+def task_win(task):
     with st.container(border=True):
-        st.markdown(f"**:violet[{data.name}]**")
-        st.markdown(data.description)
-        if hasattr(data, "architecture"):  # model task
+        st.markdown(f"**:violet[{task.name}]**")
+        st.markdown(task.description)
+        if hasattr(task, "architecture"):  # model task
             st.markdown(
                 f"""
     | Model_type | Architecture | hyperparameters |
     |------------|--------------|-----------------|
-    | {data.model_type} | {data.architecture} | {data.hyperparameters} |
+    | {task.model_type} | {task.architecture} | {task.hyperparameters} |
     """
             )
 
 
-def workspace_win(workspace, instance_id=None, cmp_workspace=None):
+def workspace_win(workspace, cmp_workspace=None, cmp_name="last code."):
     show_files = {k: v for k, v in workspace.file_dict.items() if "test" not in k}
 
-    base_key = str(workspace.workspace_path)
-    if instance_id is not None:
-        base_key += f"_{instance_id}"
-    unique_key = hashlib.md5(base_key.encode()).hexdigest()
     if len(show_files) > 0:
         if cmp_workspace:
             diff = generate_diff_from_dict(cmp_workspace.file_dict, show_files, "main.py")
-            with st.expander(":violet[**Diff with last SOTA**]"):
+            with st.expander(f":violet[**Diff with {cmp_name}**]"):
                 st.code("".join(diff), language="diff", wrap_lines=True, line_numbers=True)
         with st.expander(f"Files in :blue[{replace_ep_path(workspace.workspace_path)}]"):
             code_tabs = st.tabs(show_files.keys())
@@ -167,20 +167,24 @@ def workspace_win(workspace, instance_id=None, cmp_workspace=None):
                         line_numbers=True,
                     )
 
-            st.markdown("### Save All Files to Folder")
-            target_folder = st.text_input("Enter target folder path:", key=f"save_folder_path_input_{unique_key}")
+            if state.show_save_input:
+                st.markdown("### Save All Files to Folder")
+                unique_key = hashlib.md5("".join(show_files.values()).encode()).hexdigest() + str(
+                    random.randint(0, 10000)
+                )
+                target_folder = st.text_input("Enter target folder path:", key=unique_key)
 
-            if st.button("Save Files", key=f"save_files_button_{unique_key}"):
-                if target_folder.strip() == "":
-                    st.warning("Please enter a valid folder path.")
-                else:
-                    target_folder_path = Path(target_folder)
-                    target_folder_path.mkdir(parents=True, exist_ok=True)
-                    for filename, content in workspace.file_dict.items():
-                        save_path = target_folder_path / filename
-                        save_path.parent.mkdir(parents=True, exist_ok=True)
-                        save_path.write_text(content, encoding="utf-8")
-                    st.success(f"All files saved to: {target_folder}")
+                if st.button("Save Files", key=f"save_files_button_{unique_key}"):
+                    if target_folder.strip() == "":
+                        st.warning("Please enter a valid folder path.")
+                    else:
+                        target_folder_path = Path(target_folder)
+                        target_folder_path.mkdir(parents=True, exist_ok=True)
+                        for filename, content in workspace.file_dict.items():
+                            save_path = target_folder_path / filename
+                            save_path.parent.mkdir(parents=True, exist_ok=True)
+                            save_path.write_text(content, encoding="utf-8")
+                        st.success(f"All files saved to: {target_folder}")
     else:
         st.markdown(f"No files in :blue[{replace_ep_path(workspace.workspace_path)}]")
 
@@ -281,7 +285,7 @@ def exp_gen_win(exp_gen_data, llm_data=None):
     workspace_win(exp_gen_data["no_tag"].experiment_workspace)
 
 
-def evolving_win(data, key, llm_data=None):
+def evolving_win(data, key, llm_data=None, base_workspace=None):
     with st.container(border=True):
         if len(data) > 1:
             evo_id = st.slider("Evolving", 0, len(data) - 1, 0, key=key)
@@ -296,7 +300,11 @@ def evolving_win(data, key, llm_data=None):
                 llm_log_win(llm_data[evo_id])
             if data[evo_id]["evolving code"][0] is not None:
                 st.subheader("codes")
-                workspace_win(data[evo_id]["evolving code"][0], instance_id=key)
+                workspace_win(
+                    data[evo_id]["evolving code"][0],
+                    cmp_workspace=data[evo_id - 1]["evolving code"][0] if evo_id > 0 else base_workspace,
+                    cmp_name="last evolving code" if evo_id > 0 else "base workspace",
+                )
                 fb = data[evo_id]["evolving feedback"][0]
                 st.subheader("evolving feedback" + ("✅" if bool(fb) else "❌"))
                 f1, f2, f3 = st.tabs(["execution", "return_checking", "code"])
@@ -310,7 +318,7 @@ def evolving_win(data, key, llm_data=None):
             st.markdown("No evolving.")
 
 
-def coding_win(data, llm_data: dict | None = None):
+def coding_win(data, base_exp, llm_data: dict | None = None):
     st.header("Coding", divider="blue", anchor="coding")
     if llm_data is not None:
         common_llm_data = llm_data.pop("no_tag", [])
@@ -325,23 +333,36 @@ def coding_win(data, llm_data: dict | None = None):
         for task in task_set:
             st.subheader(task)
             task_data = {k: {a.split(".")[1]: b for a, b in v.items() if task in a} for k, v in evolving_data.items()}
-            evolving_win(task_data, key=task, llm_data=llm_data if llm_data else None)
+            evolving_win(
+                task_data,
+                key=task,
+                llm_data=llm_data if llm_data else None,
+                base_workspace=base_exp.experiment_workspace,
+            )
     else:
         # 旧版未存Task tag的Trace
-        evolving_win(evolving_data, key="coding", llm_data=llm_data if llm_data else None)
+        evolving_win(
+            evolving_data,
+            key="coding",
+            llm_data=llm_data if llm_data else None,
+            base_workspace=base_exp.experiment_workspace,
+        )
     if state.show_llm_log:
         llm_log_win(common_llm_data)
     if "no_tag" in data:
         st.subheader("Exp Workspace (coding final)")
-        workspace_win(data["no_tag"].experiment_workspace, instance_id="coding_dump")
+        workspace_win(data["no_tag"].experiment_workspace)
 
 
-def running_win(data, mle_score, llm_data=None, sota_exp=None):
+def running_win(data, base_exp, llm_data=None, sota_exp=None):
     st.header("Running", divider="blue", anchor="running")
     if llm_data is not None:
         common_llm_data = llm_data.pop("no_tag", [])
     evolving_win(
-        {k: v for k, v in data.items() if isinstance(k, int)}, key="running", llm_data=llm_data if llm_data else None
+        {k: v for k, v in data.items() if isinstance(k, int)},
+        key="running",
+        llm_data=llm_data if llm_data else None,
+        base_workspace=base_exp.experiment_workspace,
     )
     if state.show_llm_log and llm_data is not None:
         llm_log_win(common_llm_data)
@@ -349,16 +370,21 @@ def running_win(data, mle_score, llm_data=None, sota_exp=None):
         st.subheader("Exp Workspace (running final)")
         workspace_win(
             data["no_tag"].experiment_workspace,
-            instance_id="running_dump",
             cmp_workspace=sota_exp.experiment_workspace if sota_exp else None,
+            cmp_name="last SOTA",
         )
         st.subheader("Result")
         st.write(data["no_tag"].result)
-        st.subheader("MLE Submission Score" + ("✅" if (isinstance(mle_score, dict) and mle_score["score"]) else "❌"))
+        mle_score_text = data.get("mle_score", "no submission to score")
+        mle_score = extract_json(mle_score_text)
+        st.subheader(
+            "MLE Submission Score"
+            + ("✅" if (isinstance(mle_score, dict) and mle_score["score"] is not None) else "❌")
+        )
         if isinstance(mle_score, dict):
             st.json(mle_score)
         else:
-            st.code(mle_score, wrap_lines=True)
+            st.code(mle_score_text, wrap_lines=True)
 
 
 def feedback_win(fb_data, llm_data=None):
@@ -366,7 +392,10 @@ def feedback_win(fb_data, llm_data=None):
     st.header("Feedback" + ("✅" if bool(fb_data) else "❌"), divider="orange", anchor="feedback")
     if state.show_llm_log and llm_data is not None:
         llm_log_win(llm_data["no_tag"])
-    st.code(str(fb_data).replace("\n", "\n\n"), wrap_lines=True)
+    try:
+        st.code(str(fb_data).replace("\n", "\n\n"), wrap_lines=True)
+    except Exception as e:
+        st.write(fb_data.__dict__)
     if fb_data.exception is not None:
         st.markdown(f"**:red[Exception]**: {fb_data.exception}")
 
@@ -383,7 +412,7 @@ def sota_win(sota_exp, trace):
         st.markdown(f"**SOTA Exp Hypothesis**")
         hypothesis_win(sota_exp.hypothesis)
         st.markdown("**Exp Workspace**")
-        workspace_win(sota_exp.experiment_workspace, instance_id="sota")
+        workspace_win(sota_exp.experiment_workspace)
     else:
         st.markdown("No SOTA experiment.")
 
@@ -392,11 +421,15 @@ def main_win(loop_id, llm_data=None):
     loop_data = state.data[loop_id]
     exp_gen_win(loop_data["direct_exp_gen"], llm_data["direct_exp_gen"] if llm_data else None)
     if "coding" in loop_data:
-        coding_win(loop_data["coding"], llm_data["coding"] if llm_data else None)
+        coding_win(
+            loop_data["coding"],
+            base_exp=loop_data["direct_exp_gen"]["no_tag"],
+            llm_data=llm_data["coding"] if llm_data else None,
+        )
     if "running" in loop_data:
         running_win(
             loop_data["running"],
-            loop_data.get("mle_score", "no submission to score"),
+            base_exp=loop_data["coding"]["no_tag"],
             llm_data=llm_data["running"] if llm_data else None,
             sota_exp=(
                 state.data[loop_id - 1].get("record", {}).get("SOTA experiment", None)
@@ -682,8 +715,9 @@ with st.sidebar:
             state.times = load_times(state.log_folder / state.log_path)
             state.data, state.llm_data = load_data(state.log_folder / state.log_path)
             st.rerun()
-    st.toggle("Show LLM Log", key="show_llm_log")
-    st.toggle("Show stdout", key="show_stdout")
+    st.toggle("**Show LLM Log**", key="show_llm_log")
+    st.toggle("*Show stdout*", key="show_stdout")
+    st.toggle("*Show save workspace feature*", key="show_save_input")
     st.markdown(
         f"""
 - [Exp Gen](#exp-gen)
