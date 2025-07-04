@@ -84,7 +84,7 @@ task:
             metric: loss
             loss: mse
             n_jobs: 20
-            GPU: 0
+            GPU: 1
             pt_model_uri: "model.model_cls"
             pt_model_kwargs: {
                 "num_features": {{ num_features }}{% if num_timesteps %}, "num_timesteps": {{ num_timesteps }}{% endif %}
