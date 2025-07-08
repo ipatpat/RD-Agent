@@ -1,10 +1,10 @@
 import qlib
 
-qlib.init(provider_uri="~/.qlib/qlib_data/cn_data")
+qlib.init(provider_uri="~/.qlib/qlib_data/us_data")
 
 from qlib.data import D
 
-instruments = D.instruments()
+instruments = D.instruments() # Use NASDAQ-100 as an example
 fields = ["$open", "$close", "$high", "$low", "$volume", "$factor"]
 data = D.features(instruments, fields, freq="day").swaplevel().sort_index().loc["2008-12-29":].sort_index()
 
