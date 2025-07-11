@@ -34,12 +34,9 @@ class ParallelMultiTraceExpGen(ExpGen):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # The underlying generator for creating a single experiment
-        self.exp_gen = DataScienceRDLoop._get_exp_gen(
-            "rdagent.scenarios.data_science.proposal.exp_gen.DSExpGen", self.scen
-        )
+        self.exp_gen = DataScienceRDLoop.default_exp_gen(self.scen)
         self.merge_exp_gen = ExpGen2Hypothesis(self.scen)
-        self.trace_scheduler: TraceScheduler = RoundRobinScheduler()
-        self.max_trace_num = DS_RD_SETTING.max_trace_num
+        self.trace_scheduler: TraceScheduler = RoundRobinScheduler(DS_RD_SETTING.max_trace_num)
 
     def gen(self, trace: "DSTrace") -> "Experiment":
         raise NotImplementedError(
@@ -69,15 +66,9 @@ class ParallelMultiTraceExpGen(ExpGen):
                     else:
                         # set the knowledge base option back to False for the other traces
                         DS_RD_SETTING.enable_knowledge_base = False
-                # step 1: select the parant trace to expand
-                # Policy: if we have fewer traces than our target, start a new one.
-                if trace.sub_trace_count < self.max_trace_num:
-                    local_selection = trace.NEW_ROOT
-                else:
-                    # Otherwise, use the scheduler to pick an existing trace to expand.
-                    local_selection = await self.trace_scheduler.select_trace(trace)
 
                 if loop.get_unfinished_loop_cnt(loop.loop_idx) < RD_AGENT_SETTINGS.get_max_parallel():
+                    local_selection = await self.trace_scheduler.next(trace)
 
                     # set the local selection as the global current selection for the trace
                     trace.set_current_selection(local_selection)
