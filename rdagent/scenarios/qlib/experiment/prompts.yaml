@@ -150,7 +150,7 @@ qlib_factor_from_report_rich_style_description : |-
 qlib_factor_experiment_setting: |-
   | Dataset 📊 | Model 🤖    | Factors 🌟       | Data Split  🧮                                   |
   |---------|----------|---------------|-------------------------------------------------|
-  | nasdaq100  | LGBModel | Alpha158 Plus | Train: 2014-01-01 to 2020-12-31 <br> Valid: 2015-01-01 to 2016-12-31 <br> Test &nbsp;: 2017-01-01 to 2020-08-01 |
+  | sp500  | LGBModel | Alpha158 Plus | Train: 2014-01-01 to 2020-12-31 <br> Valid: 2015-01-01 to 2016-12-31 <br> Test &nbsp;: 2017-01-01 to 2020-08-01 |
 
 
 qlib_model_background: |-
