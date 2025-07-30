@@ -2,7 +2,7 @@ qlib_init:
     provider_uri: "~/.qlib/qlib_data/us_data"
     region: us
 
-market: &market nasdaq100
+market: &market all
 benchmark: &benchmark ^ndx
 
 data_handler_config: &data_handler_config
