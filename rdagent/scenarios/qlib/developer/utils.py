@@ -32,20 +32,29 @@ def process_factor_data(exp_or_list: List[QlibFactorExperiment] | QlibFactorExpe
                 # otherwise, it is developed with designed task. So it should have feedback.
                 assert isinstance(exp.prop_dev_feedback, CoSTEERMultiFeedback)
                 # Iterate over sub-implementations and execute them to get each factor data
+                valid_tasks_and_impls = [
+                    (exp.sub_tasks[i], implementation)
+                    for i, (implementation, fb) in enumerate(zip(exp.sub_workspace_list, exp.prop_dev_feedback))
+                    if implementation and fb
+                ]
+
+                if not valid_tasks_and_impls:
+                    continue
+
+                tasks_to_run, impls_to_run = zip(*valid_tasks_and_impls)
+
                 message_and_df_list = multiprocessing_wrapper(
-                    [
-                        (implementation.execute, ("All",))
-                        for implementation, fb in zip(exp.sub_workspace_list, exp.prop_dev_feedback)
-                        if implementation and fb
-                    ],  # only execute successfully feedback
+                    [(impl.execute, ("All",)) for impl in impls_to_run],
                     n=RD_AGENT_SETTINGS.multi_proc_n,
                 )
                 error_message = ""
-                for message, df in message_and_df_list:
+                for i, (message, df) in enumerate(message_and_df_list):
                     # Check if factor generation was successful
                     if df is not None and "datetime" in df.index.names:
                         time_diff = df.index.get_level_values("datetime").to_series().diff().dropna().unique()
                         if pd.Timedelta(minutes=1) not in time_diff:
+                            task = tasks_to_run[i]
+                            df.columns = [task.factor_name]
                             factor_dfs.append(df)
                             logger.info(
                                 f"Factor data from {exp.hypothesis.concise_justification} is successfully generated."
