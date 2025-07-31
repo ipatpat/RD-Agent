@@ -1,5 +1,5 @@
 qlib_init:
-    provider_uri: "~/.qlib/qlib_data/us_data"
+    provider_uri: "~/.qlib/qlib_data/my_data"
     region: us
 market: &market all
 benchmark: &benchmark ^ndx
