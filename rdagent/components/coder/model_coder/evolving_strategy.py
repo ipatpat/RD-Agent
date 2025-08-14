@@ -85,5 +85,9 @@ class ModelMultiProcessEvolvingStrategy(MultiProcessEvolvingStrategy):
                 continue
             if evo.sub_workspace_list[index] is None:
                 evo.sub_workspace_list[index] = ModelFBWorkspace(target_task=evo.sub_tasks[index])
-            evo.sub_workspace_list[index].inject_files(**{"model.py": code_list[index]})
+            code_or_files = code_list[index]
+            if isinstance(code_or_files, dict):
+                evo.sub_workspace_list[index].inject_files(**code_or_files)
+            else:
+                evo.sub_workspace_list[index].inject_files(**{"model.py": code_or_files})
         return evo
