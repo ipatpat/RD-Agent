@@ -3,6 +3,7 @@ from typing import List, Literal
 
 from rdagent.app.data_science.conf import DS_RD_SETTING
 from rdagent.core.evolving_framework import KnowledgeBase
+from rdagent.core.experiment import Experiment
 from rdagent.core.proposal import ExperimentFeedback, Hypothesis, Trace
 from rdagent.scenarios.data_science.experiment.experiment import COMPONENT, DSExperiment
 from rdagent.scenarios.data_science.scen import DataScienceScen
@@ -93,6 +94,7 @@ class DSTrace(Trace[DataScienceScen, KnowledgeBase]):
 
     def sync_dag_parent_and_hist(
         self,
+        exp_and_fb: tuple[Experiment, ExperimentFeedback],
     ) -> None:
         """
         Adding corresponding parent index to the dag_parent when the hist is going to be changed.
@@ -111,6 +113,7 @@ class DSTrace(Trace[DataScienceScen, KnowledgeBase]):
                 current_node_idx = len(self.hist) - 1
 
             self.dag_parent.append((current_node_idx,))
+        self.hist.append(exp_and_fb)
 
     def retrieve_search_list(
         self,
@@ -171,7 +174,7 @@ class DSTrace(Trace[DataScienceScen, KnowledgeBase]):
     def experiment_and_feedback_list_after_init(
         self,
         return_type: Literal["sota", "failed", "all"],
-        search_type: Literal["all", "ancestors"] = "all",
+        search_type: Literal["all", "ancestors"] = "ancestors",
         selection: tuple[int, ...] | None = None,
         max_retrieve_num: int | None = None,
     ) -> list[tuple[DSExperiment, ExperimentFeedback]]:
@@ -182,27 +185,27 @@ class DSTrace(Trace[DataScienceScen, KnowledgeBase]):
         final_component = self.COMPLETE_ORDER[-1]
         has_final_component = True if DS_RD_SETTING.coder_on_whole_pipeline else False
         SOTA_exp_and_feedback_list = []
-        failed_exp_and_feedback_list = []
+        failed_exp_and_feedback_list_after_sota = []
         for exp, fb in search_list:
             if has_final_component:
                 if fb.decision:
                     SOTA_exp_and_feedback_list.append((exp, fb))
-                    failed_exp_and_feedback_list = []
+                    failed_exp_and_feedback_list_after_sota = []
                 else:
-                    failed_exp_and_feedback_list.append((exp, fb))
+                    failed_exp_and_feedback_list_after_sota.append((exp, fb))
             if exp.hypothesis.component == final_component and fb:
                 has_final_component = True
-        if max_retrieve_num is not None and (SOTA_exp_and_feedback_list or failed_exp_and_feedback_list):
+        if max_retrieve_num is not None and (SOTA_exp_and_feedback_list or failed_exp_and_feedback_list_after_sota):
             SOTA_exp_and_feedback_list = SOTA_exp_and_feedback_list[
                 -min(max_retrieve_num, len(SOTA_exp_and_feedback_list)) :
             ]
-            failed_exp_and_feedback_list = failed_exp_and_feedback_list[
-                -min(max_retrieve_num, len(failed_exp_and_feedback_list)) :
+            failed_exp_and_feedback_list_after_sota = failed_exp_and_feedback_list_after_sota[
+                -min(max_retrieve_num, len(failed_exp_and_feedback_list_after_sota)) :
             ]
         if return_type == "all":
-            return SOTA_exp_and_feedback_list + failed_exp_and_feedback_list
+            return SOTA_exp_and_feedback_list + failed_exp_and_feedback_list_after_sota
         elif return_type == "failed":
-            return failed_exp_and_feedback_list
+            return failed_exp_and_feedback_list_after_sota
         elif return_type == "sota":
             return SOTA_exp_and_feedback_list
         else:
@@ -241,11 +244,12 @@ class DSTrace(Trace[DataScienceScen, KnowledgeBase]):
     def last_successful_exp(
         self,
         search_type: Literal["all", "ancestors"] = "ancestors",
+        selection: tuple[int, ...] | None = None,
     ) -> DSExperiment | None:
         """
         Access the last successful experiment even part of the components are not completed.
         """
-        search_list = self.retrieve_search_list(search_type)
+        search_list = self.retrieve_search_list(search_type, selection=selection)
 
         for exp, ef in search_list[::-1]:
             if ef.decision:
@@ -266,11 +270,12 @@ class DSTrace(Trace[DataScienceScen, KnowledgeBase]):
     def last_exp_fb(
         self,
         search_type: Literal["all", "ancestors"] = "ancestors",
+        selection: tuple[int, ...] | None = None,
     ) -> tuple[DSExperiment, ExperimentFeedback] | None:
         """
         Access the last experiment and feedback
         """
-        search_list = self.retrieve_search_list(search_type)
+        search_list = self.retrieve_search_list(search_type, selection=selection)
         for exp, ef in search_list[::-1]:
             return exp, ef
         return None
