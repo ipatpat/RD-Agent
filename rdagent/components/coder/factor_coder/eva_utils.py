@@ -4,6 +4,7 @@ from abc import abstractmethod
 from typing import Dict, Tuple
 
 import pandas as pd
+from pydantic import BaseModel
 
 from rdagent.components.coder.factor_coder.config import FACTOR_COSTEER_SETTINGS
 from rdagent.components.coder.factor_coder.factor import FactorTask
@@ -11,6 +12,18 @@ from rdagent.core.experiment import Task, Workspace
 from rdagent.oai.llm_conf import LLM_SETTINGS
 from rdagent.oai.llm_utils import APIBackend
 from rdagent.utils.agent.tpl import T
+
+
+class OutputFormatEvaluationResult(BaseModel):
+    """Simple structure for output format evaluation"""
+    output_format_decision: bool
+    output_format_feedback: str
+
+
+class FinalEvaluationResult(BaseModel):
+    """Simple structure for final evaluation"""
+    final_decision: bool
+    final_feedback: str
 
 
 class FactorEvaluator:
@@ -196,6 +209,7 @@ class FactorOutputFormatEvaluator(FactorEvaluator):
                     system_prompt=system_prompt,
                     json_mode=True,
                     json_target_type=Dict[str, str | bool | int],
+                    response_format=OutputFormatEvaluationResult,  # 添加服务器端JSON schema约束
                 )
                 resp_dict = json.loads(resp)
                 resp_dict["output_format_decision"] = str(resp_dict["output_format_decision"]).lower() in ["true", "1"]
@@ -530,6 +544,7 @@ class FactorFinalDecisionEvaluator(FactorEvaluator):
                         json_mode=True,
                         seed=attempts,  # in case of useless retrying when cache enabled.
                         json_target_type=Dict[str, str | bool | int],
+                        response_format=FinalEvaluationResult,  # 添加服务器端JSON schema约束
                     ),
                 )
                 final_decision = final_evaluation_dict["final_decision"]
