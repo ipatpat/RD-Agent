@@ -20,5 +20,6 @@ RUN python -m pip install -e .
 
 RUN pip install catboost
 RUN pip install xgboost
-RUN pip install scipy==1.11.4
+RUN pip install scipy==1.12.0
 RUN pip install tables
+RUN pip install cvxpy==1.6.7
